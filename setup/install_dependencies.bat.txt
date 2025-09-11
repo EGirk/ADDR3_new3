@@ -1,0 +1,10 @@
+@echo off
+echo Встановлення залежностей для addrinity-migration...
+
+REM Оновлення pip
+pip install --upgrade pip
+
+REM Встановлення залежностей
+pip install -r requirements.txt
+
+echo Залежності встановлено успішно!

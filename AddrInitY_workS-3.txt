@@ -1,0 +1,107 @@
+# --  Подготівка та налаштування  Пітон-Середовища до запуску через CMD
+# --  Fast-API додатка (в цій папкі )  з БД-Постргес + Векетор-розширеннем !!!
+
+
+addrinity-migration/
+├── setup/
+│   ├── create_structure.sh     # Bash скрипт створення структури
+│   ├── create_structure.bat    # Batch скрипт створення структури
+│   └── install_dependencies.sh # Встановлення залежностей
+├── config/
+│   ├── __init__.py
+│   └── database.py
+├── src/
+│   ├── __init__.py
+│   ├── migrators/
+│   │   ├── __init__.py
+│   │   ├── bld_local.py
+│   │   ├── ek_addr.py
+│   │   └── rtg_addr.py
+│   ├── processors/
+│   │   ├── __init__.py
+│   │   └── address_parser.py
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── validators.py
+│   │   └── logger.py
+│   └── ai_helper/
+│       ├── __init__.py
+│       ├── fuzzy_search.py
+│       └── address_parser_ai.py
+├── logs/
+├── migrations/
+│   └── reports/
+├── requirements.txt
+├── migrate.py
+├── search_api.py
+└── README.md
+
+
+    python -m venv venv
+    # Для Linux/macOS:
+    source venv/bin/activate
+    # Для Windows (CMD):
+    .\venv\Scripts\activate.bat
+    # Для Windows (PowerShell):
+    .\venv\Scripts\Activate.ps1
+C:\Work\dm2_project1>venv\Scripts\activate   ## --
+
+chcp 65001        ## --   Перемикання  СМД - на UTF-8
+# -- C:\Work\dm2_project1\venv\Scripts\python.exe -m pip install --upgrade pip
+
+pip install fastapi "uvicorn[standard]" pedantic  fastapi-pagination    #  <--  !!! -= для ПейджиНації великих ВИвод-ів !!!
+# -- pip install fastapi "uvicorn[standard]" pedantic pydantic-settings sqlalchemy asyncpg greenlet pgvector fastapi-pagination alembic
+pip install pytest pytest-asyncio httpx  Pillow  # --    pip install passlib  "python-jose[cryptography]"    -- !!!
+
+  # Повертаємо StreamingResponse з правильним MIME-типом.
+  # Swagger UI і браузер автоматично розпізнають це як зображення і відобразять його.
+    return StreamingResponse(content=image_data, media_type=media_type)
+  # Примітка: для запуску цього коду потрібні бібліотеки FastAPI, uvicorn та Pillow
+
+
+
+# --   GiT -- ==
+(venv) # -- Only one first !!! -- # git init
+(venv) # -- Only one time  !!! -- # git remote add origin https://github.com/EGirk/ADDR3_new3.git
+(venv) [jek5in@cachyos-x58 ADDRiniTY]$ git branch -m main
+
+
+# --   # Встановлення залежностей:
+# --  (venv) ./setup/install_dependencies.sh
+# --   # Міграція всіх таблиць
+# -- (venv)   python migrate.py
+# --    # Міграція окремих таблиць
+# --  (venv)  python migrate.py --tables bld_local rtg_addr
+# --   # Тестовий запуск
+# --  (venv)  python migrate.py --dry-run
+# --
+
+# Міграція всіх таблиць
+(venv) python migrate.py
+
+# Міграція лише bld_local
+(venv) python migrate.py --tables bld_local
+
+# Тестовий запуск
+(venv) python migrate.py --tables bld_local --dry-run
+
+
+
+(venv) # -- After HomeWork in Work | After Work in Home !!! -- # git  pull
+(venv) git add .
+(venv) git commit -a -m "День-25 НОВА МОДЕЛь ADDRs-3 , ПочатОК = (Проект-3 руками-2 з ШІ-3-Qwen-3)"
+
+
+(venv) git push -u origin main
+
+(venv)             python app/db/seed.py
+(venv)             python -m app.db.seed
+
+(venv)            python app/db/generate_erd.py
+(venv)             python -m app.db.generate_erd
+
+(venv)   uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
+
+
+
+
