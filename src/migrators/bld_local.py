@@ -207,16 +207,21 @@ class BldLocalMigrator:
                         VALUES (%s, %s, %s, %s, %s)
                     """, (street_entity_id, old_street, 'uk', False, 'old'))
             
-            # Створення будівлі
-            building_number = str(row['l']) if row['l'] else ''
-            self.cursor.execute("""
-                INSERT INTO addrinity.buildings 
-                (street_entity_id, number, postal_code,
-                 bld_local_objectid, bld_local_id_bld_rtg)
-                VALUES (%s, %s, %s, %s, %s)
-                RETURNING id
-            """, (street_entity_id, building_number, None,
-                  row['objectid'], row['id_bld_rtg']))
+        
+        # Створення будівлі (БЕЗ ПРИМІЩЕНЬ, бо їх немає в bld_local)
+        building_number = str(row['l']) if row['l'] else ''
+        building_key = f"bld_local_{row['objectid']}"  # Унікальний ключ
+        
+        self.cursor.execute("""
+            INSERT INTO addrinity.buildings 
+            (street_entity_id, number, building_key,
+             bld_local_objectid, bld_local_id_bld_rtg)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (building_key) DO UPDATE SET
+                street_entity_id = EXCLUDED.street_entity_id
+            RETURNING id
+        """, (street_entity_id, building_number, building_key,
+              row['objectid'], row['id_bld_rtg']))
             
             building_id = self.cursor.fetchone()[0]
             
