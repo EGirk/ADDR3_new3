@@ -126,12 +126,18 @@ class BldLocalMigrator:
                 INSERT INTO addrinity.city_districts 
                 (city_id, name_uk, type, bld_local_raion_name) 
                 VALUES (%s, %s, %s, %s) 
-                ON CONFLICT (city_id, name_uk) DO UPDATE SET
-                    bld_local_raion_name = EXCLUDED.bld_local_raion_name
-                RETURNING id
+                ON CONFLICT (city_id, name_uk) DO NOTHING
             """, (city_id, district_name, 'адміністративний', district_name))
             
-            district_id = self.cursor.fetchone()[0]
+            # Отримуємо ID створеного або існуючого запису
+            self.cursor.execute("""
+                SELECT id FROM addrinity.city_districts 
+                WHERE city_id = %s AND name_uk = %s
+            """, (city_id, district_name))
+            
+            result = self.cursor.fetchone()
+            district_id = result[0] if result else None
+            
             self.connection.commit()
             return district_id
             
@@ -147,12 +153,18 @@ class BldLocalMigrator:
                 INSERT INTO addrinity.street_types 
                 (name_uk, short_name_uk, bld_local_type_code) 
                 VALUES (%s, %s, %s) 
-                ON CONFLICT (name_uk) DO UPDATE SET
-                    short_name_uk = EXCLUDED.short_name_uk
-                RETURNING id
+                ON CONFLICT (name_uk) DO NOTHING
             """, (type_name, short_name, type_name))
             
-            type_id = self.cursor.fetchone()[0]
+            # Отримуємо ID створеного або існуючого запису
+            self.cursor.execute("""
+                SELECT id FROM addrinity.street_types 
+                WHERE name_uk = %s
+            """, (type_name,))
+            
+            result = self.cursor.fetchone()
+            type_id = result[0] if result else None
+            
             self.connection.commit()
             return type_id
             

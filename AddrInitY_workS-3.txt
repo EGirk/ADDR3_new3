@@ -51,7 +51,7 @@ chcp 65001        ## --   Перемикання  СМД - на UTF-8
 
 pip install fastapi "uvicorn[standard]" pedantic  fastapi-pagination    #  <--  !!! -= для ПейджиНації великих ВИвод-ів !!!
 # -- pip install fastapi "uvicorn[standard]" pedantic pydantic-settings sqlalchemy asyncpg greenlet pgvector fastapi-pagination alembic
-pip install pytest pytest-asyncio httpx  Pillow  # --    pip install passlib  "python-jose[cryptography]"    -- !!!
+pip install  tqdm psycopg2 pytest pytest-asyncio httpx  Pillow  pandas  # --    pip install passlib  "python-jose[cryptography]"    -- !!!
 
   # Повертаємо StreamingResponse з правильним MIME-типом.
   # Swagger UI і браузер автоматично розпізнають це як зображення і відобразять його.
