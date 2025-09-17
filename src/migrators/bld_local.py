@@ -1,10 +1,11 @@
-"""Мігратор для таблиці addr.bld_local"""
+"""Повний мігратор для addr.bld_local з універсальним валідатором"""
 
 import pandas as pd
 import psycopg2
 import json
 from tqdm import tqdm
 from src.utils.logger import migration_logger
+from src.utils.validators import get_universal_comparator
 from config.database import CONNECTION_STRING
 
 class BldLocalMigrator:
@@ -12,7 +13,14 @@ class BldLocalMigrator:
         self.connection = psycopg2.connect(CONNECTION_STRING)
         self.cursor = self.connection.cursor()
         self.logger = migration_logger
-        self.stats = {'processed': 0, 'errors': 0, 'duplicates': 0}
+        self.stats = {
+            'processed': 0, 
+            'errors': 0, 
+            'duplicates': 0, 
+            'validated': 0,
+            'similar_found': 0
+        }
+        self.comparator = get_universal_comparator()
     
     def setup_source_tracking(self):
         """Налаштування відстеження джерела даних"""
@@ -38,7 +46,7 @@ class BldLocalMigrator:
             return None
     
     def create_ukraine_hierarchy(self):
-        """Створення ієрархії України"""
+        """Створення базової ієрархії України"""
         try:
             # Країна
             self.cursor.execute("""
@@ -120,25 +128,44 @@ class BldLocalMigrator:
             raise
     
     def get_or_create_city_district(self, district_name, city_id):
-        """Отримання або створення району міста"""
+        """Отримання або створення району міста з валідацією"""
         try:
+            # Нормалізація назви району
+            normalized_name = self.comparator.normalize_text(str(district_name), "district")
+            
+            # Перевірка наявності схожих районів
+            validation_result = self.comparator.validate_object_universally(
+                str(district_name), "district"
+            )
+            
+            # Пошук існуючого району
+            self.cursor.execute("""
+                SELECT id FROM addrinity.city_districts 
+                WHERE city_id = %s AND (
+                    name_uk = %s OR 
+                    similarity(name_uk, %s) > 0.9
+                )
+            """, (city_id, normalized_name, normalized_name))
+            
+            result = self.cursor.fetchone()
+            if result:
+                return result[0]
+            
+            # Створення нового району
             self.cursor.execute("""
                 INSERT INTO addrinity.city_districts 
                 (city_id, name_uk, type, bld_local_raion_name) 
                 VALUES (%s, %s, %s, %s) 
-                ON CONFLICT (city_id, name_uk) DO NOTHING
-            """, (city_id, district_name, 'адміністративний', district_name))
+                RETURNING id
+            """, (city_id, normalized_name, 'адміністративний', str(district_name)))
             
-            # Отримуємо ID створеного або існуючого запису
-            self.cursor.execute("""
-                SELECT id FROM addrinity.city_districts 
-                WHERE city_id = %s AND name_uk = %s
-            """, (city_id, district_name))
-            
-            result = self.cursor.fetchone()
-            district_id = result[0] if result else None
-            
+            district_id = self.cursor.fetchone()[0]
             self.connection.commit()
+            
+            # Логування валідації
+            if validation_result['similar_objects']:
+                self.logger.info(f"Створено район '{normalized_name}' з можливими схожими: {len(validation_result['similar_objects'])}")
+            
             return district_id
             
         except Exception as e:
@@ -146,25 +173,35 @@ class BldLocalMigrator:
             self.logger.error(f"Помилка створення району міста: {e}")
             raise
     
-    def get_or_create_street_type(self, type_name, short_name=None):
-        """Отримання або створення типу вулиці"""
+    def get_or_create_street_type(self, type_name):
+        """Отримання або створення типу вулиці з валідацією"""
         try:
+            if not type_name:
+                type_name = "ВУЛ."
+            
+            # Нормалізація типу вулиці
+            normalized_type = self.comparator.normalize_text(str(type_name), "street_type")
+            
+            # Перевірка наявності
+            self.cursor.execute("""
+                SELECT id FROM addrinity.street_types 
+                WHERE name_uk = %s OR short_name_uk = %s
+            """, (normalized_type, str(type_name)))
+            
+            result = self.cursor.fetchone()
+            if result:
+                return result[0]
+            
+            # Створення нового типу
+            short_name = self.get_short_name_for_type(normalized_type)
             self.cursor.execute("""
                 INSERT INTO addrinity.street_types 
                 (name_uk, short_name_uk, bld_local_type_code) 
                 VALUES (%s, %s, %s) 
-                ON CONFLICT (name_uk) DO NOTHING
-            """, (type_name, short_name, type_name))
+                RETURNING id
+            """, (normalized_type, short_name, str(type_name)))
             
-            # Отримуємо ID створеного або існуючого запису
-            self.cursor.execute("""
-                SELECT id FROM addrinity.street_types 
-                WHERE name_uk = %s
-            """, (type_name,))
-            
-            result = self.cursor.fetchone()
-            type_id = result[0] if result else None
-            
+            type_id = self.cursor.fetchone()[0]
             self.connection.commit()
             return type_id
             
@@ -173,25 +210,35 @@ class BldLocalMigrator:
             self.logger.error(f"Помилка створення типу вулиці: {e}")
             raise
     
+    def get_short_name_for_type(self, full_type):
+        """Отримання скороченої назви типу вулиці"""
+        short_names = {
+            'вулиця': 'вул.',
+            'проспект': 'просп.',
+            'бульвар': 'бул.',
+            'провулок': 'пров.',
+            'шосе': 'ш.',
+            'тупик': 'туп.',
+            'майдан': 'майд.',
+            'алея': 'ал.'
+        }
+        return short_names.get(full_type.lower(), full_type[:4] + '.')
+    
     def is_valid_record(self, row):
-        """Перевірка чи запис валідний для міграції"""
-        # Базові обов'язкові поля
+        """Валідація запису"""
         if not row['objectid']:
-            return False
+            return False, "Відсутній objectid"
         
-        # Має бути хоча б одна непуста адреса
         if not row['adres_n_uk'] and not row['adres_o_uk']:
-            return False
+            return False, "Відсутні адреси"
         
-        # Має бути назва вулиці
         if not row['street_ukr'] or not str(row['street_ukr']).strip():
-            return False
+            return False, "Відсутня назва вулиці"
         
-        # Має бути район
         if not row['raion'] or not str(row['raion']).strip():
-            return False
+            return False, "Відсутній район"
         
-        return True
+        return True, "OK"
     
     def extract_street_from_address(self, address):
         """Витяг назви вулиці з адресного рядка"""
@@ -206,31 +253,45 @@ class BldLocalMigrator:
             return parts[1]
         return address
     
-    def process_single_row(self, row, source_id, city_id):
-        """Обробка одного рядка з bld_local"""
+    def check_existing_street_entity(self, objectid):
+        """Перевірка наявності вуличного об'єкта"""
         try:
-            # Валідація запису
-            if not self.is_valid_record(row):
-                self.stats['errors'] += 1
-                return
-            
-            # Отримання або створення району міста
-            raion_name = str(row['raion']) if row['raion'] and str(row['raion']).strip() else 'Невідомий'
-            city_district_id = self.get_or_create_city_district(raion_name, city_id)
-            
-            # Отримання або створення типу вулиці
-            type_name = str(row['type_ukr']) if row['type_ukr'] else 'ВУЛ.'
-            street_type_id = self.get_or_create_street_type(type_name, 'вул.')
-            
-            # Перевірка наявності вуличного об'єкта
             self.cursor.execute("""
                 SELECT id FROM addrinity.street_entities 
                 WHERE bld_local_objectid = %s
-            """, (row['objectid'],))
+            """, (objectid,))
+            return self.cursor.fetchone()
+        except Exception as e:
+            return None
+    
+    def process_single_row(self, row, source_id, city_id):
+        """Обробка одного запису з повною валідацією"""
+        try:
+            # Базова валідація
+            is_valid, message = self.is_valid_record(row)
+            if not is_valid:
+                self.stats['errors'] += 1
+                self.logger.debug(f"Невалідний запис {row.get('objectid', 'unknown')}: {message}")
+                return
             
-            if self.cursor.fetchone():
+            # Перевірка дублікатів
+            if self.check_existing_street_entity(row['objectid']):
                 self.stats['duplicates'] += 1
-                return  # Вже існує
+                return
+            
+            # Валідація назви вулиці
+            street_name = str(row['street_ukr']).strip()
+            validation_result = self.comparator.validate_object_universally(
+                street_name, "street"
+            )
+            
+            # Отримання району міста
+            raion_name = str(row['raion']) if row['raion'] and str(row['raion']).strip() else 'Невідомий'
+            city_district_id = self.get_or_create_city_district(raion_name, city_id)
+            
+            # Отримання типу вулиці
+            type_name = str(row['type_ukr']) if row['type_ukr'] else 'ВУЛ.'
+            street_type_id = self.get_or_create_street_type(type_name)
             
             # Створення вуличного об'єкта
             self.cursor.execute("""
@@ -245,57 +306,67 @@ class BldLocalMigrator:
             street_entity_id = self.cursor.fetchone()[0]
             
             # Додавання назв вулиці
-            if row['street_ukr']:
-                # Поточна назва
+            # Поточна назва
+            self.cursor.execute("""
+                INSERT INTO addrinity.street_names 
+                (street_entity_id, name, language_code, is_current, name_type)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (street_entity_id, street_name, 'uk', True, 'current'))
+            
+            # Стара назва (якщо відрізняється)
+            old_street = self.extract_street_from_address(str(row['adres_o_uk']))
+            if old_street and old_street != street_name:
+                # Валідація старої назви
+                old_validation = self.comparator.validate_object_universally(
+                    old_street, "street"
+                )
+                
                 self.cursor.execute("""
                     INSERT INTO addrinity.street_names 
                     (street_entity_id, name, language_code, is_current, name_type)
                     VALUES (%s, %s, %s, %s, %s)
-                """, (street_entity_id, str(row['street_ukr']), 'uk', True, 'current'))
+                """, (street_entity_id, old_street, 'uk', False, 'old'))
                 
-                # Стара назва (якщо відрізняється)
-                old_street = self.extract_street_from_address(str(row['adres_o_uk']))
-                if old_street and old_street != str(row['street_ukr']):
-                    self.cursor.execute("""
-                        INSERT INTO addrinity.street_names 
-                        (street_entity_id, name, language_code, is_current, name_type)
-                        VALUES (%s, %s, %s, %s, %s)
-                    """, (street_entity_id, old_street, 'uk', False, 'old'))
+                if old_validation['similar_objects']:
+                    self.stats['similar_found'] += 1
             
             # Створення будівлі
             building_number = str(row['l']) if row['l'] else ''
-            building_key = f"bld_local_{row['objectid']}"  # Унікальний ключ
             
             self.cursor.execute("""
                 INSERT INTO addrinity.buildings 
-                (street_entity_id, number, building_key,
+                (street_entity_id, number,
                  bld_local_objectid, bld_local_id_bld_rtg)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (building_key) DO UPDATE SET
-                    street_entity_id = EXCLUDED.street_entity_id
+                VALUES (%s, %s, %s, %s)
                 RETURNING id
-            """, (street_entity_id, building_number, building_key,
+            """, (street_entity_id, building_number,
                   row['objectid'], row['id_bld_rtg']))
             
             building_id = self.cursor.fetchone()[0]
             
-            # Збереження зв'язку з джерелом
+            # Збереження джерела
             original_data = {
                 'objectid': int(row['objectid']) if row['objectid'] else None,
                 'adres_n_uk': str(row['adres_n_uk']) if row['adres_n_uk'] else None,
                 'adres_o_uk': str(row['adres_o_uk']) if row['adres_o_uk'] else None,
-                'raion': str(row['raion']) if row['raion'] else None,
-                'street_ukr': str(row['street_ukr']) if row['street_ukr'] else None,
-                'building_number': building_number
+                'raion': raion_name,
+                'street_ukr': street_name,
+                'building_number': building_number,
+                'validation_result': {
+                    'confidence': validation_result['confidence_level'],
+                    'similar_objects_count': len(validation_result['similar_objects'])
+                }
             }
             
             self.cursor.execute("""
                 INSERT INTO addrinity.object_sources 
                 (object_type, object_id, source_id, original_data)
                 VALUES (%s, %s, %s, %s)
-            """, ('building', building_id, source_id, json.dumps(original_data, ensure_ascii=False)))
+            """, ('building', building_id, source_id, 
+                  json.dumps(original_data, ensure_ascii=False)))
             
             self.stats['processed'] += 1
+            self.stats['validated'] += 1
             self.connection.commit()
             
         except Exception as e:
@@ -340,7 +411,8 @@ class BldLocalMigrator:
                         self.process_single_row(row, source_id, city_id)
                     else:
                         # Для тестового запуску просто симулюємо
-                        if self.is_valid_record(row):
+                        is_valid, _ = self.is_valid_record(row)
+                        if is_valid:
                             self.stats['processed'] += 1
                         else:
                             self.stats['errors'] += 1
@@ -358,6 +430,8 @@ class BldLocalMigrator:
             - Оброблено: {self.stats['processed']}
             - Помилок: {self.stats['errors']}
             - Дублікатів: {self.stats['duplicates']}
+            - Валідовано: {self.stats['validated']}
+            - Схожих знайдено: {self.stats['similar_found']}
             - Всього: {self.stats['processed'] + self.stats['errors'] + self.stats['duplicates']}
             """)
             
@@ -370,3 +444,6 @@ class BldLocalMigrator:
         finally:
             if hasattr(self, 'connection') and self.connection:
                 self.connection.close()
+
+# Аналогічно для інших міграторів...
+

@@ -49,9 +49,9 @@ C:\Work\dm2_project1>venv\Scripts\activate   ## --
 chcp 65001        ## --   Перемикання  СМД - на UTF-8
 # -- C:\Work\dm2_project1\venv\Scripts\python.exe -m pip install --upgrade pip
 
-pip install fastapi "uvicorn[standard]" pedantic  fastapi-pagination    #  <--  !!! -= для ПейджиНації великих ВИвод-ів !!!
+ pip install fastapi "uvicorn[standard]" pedantic  fastapi-pagination    #  <--  !!! -= для ПейджиНації великих ВИвод-ів !!!
 # -- pip install fastapi "uvicorn[standard]" pedantic pydantic-settings sqlalchemy asyncpg greenlet pgvector fastapi-pagination alembic
-pip install  tqdm psycopg2 pytest pytest-asyncio httpx  Pillow  pandas  # --    pip install passlib  "python-jose[cryptography]"    -- !!!
+ pip install  textdistance jellyfish Levenshtein fuzzywuzzy tqdm psycopg2 pytest pytest-asyncio httpx  Pillow  pandas  # --    pip install passlib  "python-jose[cryptography]"    -- !!!
 
   # Повертаємо StreamingResponse з правильним MIME-типом.
   # Swagger UI і браузер автоматично розпізнають це як зображення і відобразять його.
@@ -92,7 +92,7 @@ pip install  tqdm psycopg2 pytest pytest-asyncio httpx  Pillow  pandas  # --    
 (venv) git commit -a -m "День-30 НОВА=МОДЕЛь ADDRs-3 , ПочатОК = (Проект-3 руками-2 з ШІ-3-Qwen-3)"
 (venv) git commit -a -m "День-33+ НОВА=МОДЕЛь ADDRs-3 , ПочатОК = (Проект-3 руками-2 з ШІ-3-Qwen-3)+git+CoPilot"
 (venv) git commit -a -m "День-33++ НОВА=МОДЕЛь ADDRs-3, ПочатОК+3 = (Проект-3 руками-2 з ШІ-3-Qwen-3)+git+CoPilot"
-
+(venv) git commit -a -m "День-34 НОВА=МОДЕЛь ADDRs-3, ПочатОК+4 = (Проект-3 руками-2 з ШІ-3)+git+CoPilot+"
 
 (venv) git push -u origin main
 

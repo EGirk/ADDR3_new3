@@ -316,5 +316,47 @@ CREATE INDEX idx_premises_number ON addrinity.premises(number);
 CREATE INDEX idx_premises_rtg_id ON addrinity.premises(rtg_premise_id);
 
 
+-- ========================== 17.09.2025 ================================================= ++
+
+-- Додаємо унікальні індекси для ON CONFLICT
+CREATE UNIQUE INDEX IF NOT EXISTS idx_countries_iso ON addrinity.countries(iso_code);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_data_sources_name ON addrinity.data_sources(name);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_street_entities_bld_objectid ON addrinity.street_entities(bld_local_objectid);
+ -- CREATE UNIQUE INDEX IF NOT EXISTS idx_buildings_key ON addrinity.buildings(building_key);
+
+-- Для таблиці city_districts потрібен складний унікальний індекс
+CREATE UNIQUE INDEX IF NOT EXISTS idx_city_districts_city_name ON addrinity.city_districts(city_id, name_uk);
+
+-- Для street_types також складний індекс
+CREATE UNIQUE INDEX IF NOT EXISTS idx_street_types_name ON addrinity.street_types(name_uk);
+
+
+-- Додайте ці індекси в вашу базу даних:
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_city_districts_city_name 
+ON addrinity.city_districts(city_id, name_uk);
+
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_street_types_name 
+ON addrinity.street_types(name_uk);
+
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_street_entities_bld_objectid 
+ON addrinity.street_entities(bld_local_objectid);
+
+
 -- =================================================================================
+
+-- buildings (вже має)
+ALTER TABLE addrinity.buildings 
+ADD CONSTRAINT uniq_bld_local_objectid UNIQUE (bld_local_objectid);
+
+-- street_entities (вже має)
+  --  ALTER TABLE addrinity.street_entities ADD CONSTRAINT uniq_bld_local_objectid UNIQUE (bld_local_objectid);
+
+-- premises (вже має)
+ALTER TABLE addrinity.premises 
+ADD CONSTRAINT uniq_rtg_premise_id UNIQUE (rtg_premise_id);
+
+-- =================================================================================
+
+
+
 
