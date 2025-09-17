@@ -29,8 +29,13 @@ class BldLocalMigrator:
     
     def get_source_id(self):
         """Отримання ID джерела"""
-        self.cursor.execute("SELECT id FROM addrinity.data_sources WHERE name = 'bld_local'")
-        return self.cursor.fetchone()[0]
+        try:
+            self.cursor.execute("SELECT id FROM addrinity.data_sources WHERE name = 'bld_local'")
+            result = self.cursor.fetchone()
+            return result[0] if result else None
+        except Exception as e:
+            self.logger.error(f"Помилка отримання ID джерела: {e}")
+            return None
     
     def create_ukraine_hierarchy(self):
         """Створення ієрархії України"""
@@ -156,15 +161,53 @@ class BldLocalMigrator:
             self.logger.error(f"Помилка створення типу вулиці: {e}")
             raise
     
+    def is_valid_record(self, row):
+        """Перевірка чи запис валідний для міграції"""
+        # Базові обов'язкові поля
+        if not row['objectid']:
+            return False
+        
+        # Має бути хоча б одна непуста адреса
+        if not row['adres_n_uk'] and not row['adres_o_uk']:
+            return False
+        
+        # Має бути назва вулиці
+        if not row['street_ukr'] or not str(row['street_ukr']).strip():
+            return False
+        
+        # Має бути район
+        if not row['raion'] or not str(row['raion']).strip():
+            return False
+        
+        return True
+    
+    def extract_street_from_address(self, address):
+        """Витяг назви вулиці з адресного рядка"""
+        if not address or not isinstance(address, str):
+            return None
+        
+        parts = address.strip().split()
+        if len(parts) > 2:
+            # Видаляємо перший (номер будинку) і останній (тип вулиці) елементи
+            return ' '.join(parts[1:-1])
+        elif len(parts) == 2:
+            return parts[1]
+        return address
+    
     def process_single_row(self, row, source_id, city_id):
         """Обробка одного рядка з bld_local"""
         try:
+            # Валідація запису
+            if not self.is_valid_record(row):
+                self.stats['errors'] += 1
+                return
+            
             # Отримання або створення району міста
-            raion_name = row['raion'] if row['raion'] and row['raion'].strip() else 'Невідомий'
+            raion_name = str(row['raion']) if row['raion'] and str(row['raion']).strip() else 'Невідомий'
             city_district_id = self.get_or_create_city_district(raion_name, city_id)
             
             # Отримання або створення типу вулиці
-            type_name = row['type_ukr'] if row['type_ukr'] else 'ВУЛ.'
+            type_name = str(row['type_ukr']) if row['type_ukr'] else 'ВУЛ.'
             street_type_id = self.get_or_create_street_type(type_name, 'вул.')
             
             # Перевірка наявності вуличного об'єкта
@@ -196,42 +239,41 @@ class BldLocalMigrator:
                     INSERT INTO addrinity.street_names 
                     (street_entity_id, name, language_code, is_current, name_type)
                     VALUES (%s, %s, %s, %s, %s)
-                """, (street_entity_id, row['street_ukr'], 'uk', True, 'current'))
+                """, (street_entity_id, str(row['street_ukr']), 'uk', True, 'current'))
                 
                 # Стара назва (якщо відрізняється)
-                old_street = self.extract_street_from_address(row['adres_o_uk'])
-                if old_street and old_street != row['street_ukr']:
+                old_street = self.extract_street_from_address(str(row['adres_o_uk']))
+                if old_street and old_street != str(row['street_ukr']):
                     self.cursor.execute("""
                         INSERT INTO addrinity.street_names 
                         (street_entity_id, name, language_code, is_current, name_type)
                         VALUES (%s, %s, %s, %s, %s)
                     """, (street_entity_id, old_street, 'uk', False, 'old'))
             
-        
-        # Створення будівлі (БЕЗ ПРИМІЩЕНЬ, бо їх немає в bld_local)
-        building_number = str(row['l']) if row['l'] else ''
-        building_key = f"bld_local_{row['objectid']}"  # Унікальний ключ
-        
-        self.cursor.execute("""
-            INSERT INTO addrinity.buildings 
-            (street_entity_id, number, building_key,
-             bld_local_objectid, bld_local_id_bld_rtg)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (building_key) DO UPDATE SET
-                street_entity_id = EXCLUDED.street_entity_id
-            RETURNING id
-        """, (street_entity_id, building_number, building_key,
-              row['objectid'], row['id_bld_rtg']))
+            # Створення будівлі
+            building_number = str(row['l']) if row['l'] else ''
+            building_key = f"bld_local_{row['objectid']}"  # Унікальний ключ
+            
+            self.cursor.execute("""
+                INSERT INTO addrinity.buildings 
+                (street_entity_id, number, building_key,
+                 bld_local_objectid, bld_local_id_bld_rtg)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (building_key) DO UPDATE SET
+                    street_entity_id = EXCLUDED.street_entity_id
+                RETURNING id
+            """, (street_entity_id, building_number, building_key,
+                  row['objectid'], row['id_bld_rtg']))
             
             building_id = self.cursor.fetchone()[0]
             
             # Збереження зв'язку з джерелом
             original_data = {
                 'objectid': int(row['objectid']) if row['objectid'] else None,
-                'adres_n_uk': row['adres_n_uk'],
-                'adres_o_uk': row['adres_o_uk'],
-                'raion': row['raion'],
-                'street_ukr': row['street_ukr'],
+                'adres_n_uk': str(row['adres_n_uk']) if row['adres_n_uk'] else None,
+                'adres_o_uk': str(row['adres_o_uk']) if row['adres_o_uk'] else None,
+                'raion': str(row['raion']) if row['raion'] else None,
+                'street_ukr': str(row['street_ukr']) if row['street_ukr'] else None,
                 'building_number': building_number
             }
             
@@ -248,19 +290,6 @@ class BldLocalMigrator:
             self.connection.rollback()
             self.stats['errors'] += 1
             self.logger.error(f"Помилка обробки запису {row.get('objectid', 'unknown')}: {e}")
-    
-    def extract_street_from_address(self, address):
-        """Витяг назви вулиці з адресного рядка"""
-        if not address or not isinstance(address, str):
-            return None
-        
-        parts = address.strip().split()
-        if len(parts) > 2:
-            # Видаляємо перший (номер будинку) і останній (тип вулиці) елементи
-            return ' '.join(parts[1:-1])
-        elif len(parts) == 2:
-            return parts[1]
-        return address
     
     def migrate(self, dry_run=False, batch_size=1000):
         """Головний метод міграції"""
@@ -299,7 +328,10 @@ class BldLocalMigrator:
                         self.process_single_row(row, source_id, city_id)
                     else:
                         # Для тестового запуску просто симулюємо
-                        self.stats['processed'] += 1
+                        if self.is_valid_record(row):
+                            self.stats['processed'] += 1
+                        else:
+                            self.stats['errors'] += 1
                     
                     processed += 1
                     pbar.update(1)
@@ -324,4 +356,5 @@ class BldLocalMigrator:
             self.logger.error(f"Критична помилка міграції: {e}")
             raise
         finally:
-            self.connection.close()
+            if hasattr(self, 'connection') and self.connection:
+                self.connection.close()
