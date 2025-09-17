@@ -91,6 +91,7 @@ pip install pytest pytest-asyncio httpx  Pillow  # --    pip install passlib  "p
 (venv) git add .
 (venv) git commit -a -m "День-30 НОВА=МОДЕЛь ADDRs-3 , ПочатОК = (Проект-3 руками-2 з ШІ-3-Qwen-3)"
 (venv) git commit -a -m "День-33+ НОВА=МОДЕЛь ADDRs-3 , ПочатОК = (Проект-3 руками-2 з ШІ-3-Qwen-3)+git+CoPilot"
+(venv) git commit -a -m "День-33++ НОВА=МОДЕЛь ADDRs-3, ПочатОК+3 = (Проект-3 руками-2 з ШІ-3-Qwen-3)+git+CoPilot"
 
 
 (venv) git push -u origin main
