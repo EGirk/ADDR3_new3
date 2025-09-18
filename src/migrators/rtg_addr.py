@@ -3,10 +3,17 @@
 import pandas as pd
 import psycopg2
 import json
+from psycopg2.extras import Json
 from tqdm import tqdm
 from src.utils.logger import migration_logger
 from src.utils.validators import get_universal_comparator
 from config.database import CONNECTION_STRING
+
+# Потрібно додати в кожен мігратор:
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 class RtgAddrMigrator:
     def __init__(self):
