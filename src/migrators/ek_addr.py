@@ -7,7 +7,7 @@ from psycopg2.extras import Json
 from tqdm import tqdm
 from src.utils.logger import migration_logger
 from src.utils.validators import get_universal_comparator
-from config.database import CONNECTION_STRING
+from config.database import CONNECTION_STRING, engine
 
 # Потрібно додати в кожен мігратор:
 import sys
@@ -424,7 +424,7 @@ class EkAddrMigrator:
             df = pd.read_sql("""
                 SELECT * FROM addr.ek_addr 
                 WHERE street IS NOT NULL OR build IS NOT NULL
-            """, self.connection)
+            """, engine)
             
             total_records = len(df)
             self.logger.info(f"Знайдено {total_records} записів для міграції")

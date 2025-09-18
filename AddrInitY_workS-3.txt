@@ -93,6 +93,7 @@ chcp 65001        ## --   Перемикання  СМД - на UTF-8
 (venv) git commit -a -m "День-33+ НОВА=МОДЕЛь ADDRs-3 , ПочатОК = (Проект-3 руками-2 з ШІ-3-Qwen-3)+git+CoPilot"
 (venv) git commit -a -m "День-33++ НОВА=МОДЕЛь ADDRs-3, ПочатОК+3 = (Проект-3 руками-2 з ШІ-3-Qwen-3)+git+CoPilot"
 (venv) git commit -a -m "День-34 НОВА=МОДЕЛь ADDRs-3, ПочатОК+4 = (Проект-3 руками-2 з ШІ-3)+git+CoPilot+"
+(venv) git commit -a -m "День-35 НОВА=МОДЕЛь ADDRs-3, ПочатОК+4 = (Проект-3 руками-2 з ШІ-3)+git+CoPilot++"
 
 (venv) git push -u origin main
 

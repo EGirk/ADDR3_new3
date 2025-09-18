@@ -20,3 +20,9 @@ CONNECTION_STRING = f"postgresql://{DATABASE_CONFIG['user']}:{DATABASE_CONFIG['p
 
 # Connection string для SQLAlchemy
 SQLALCHEMY_URL = f"postgresql+psycopg2://{DATABASE_CONFIG['user']}:{DATABASE_CONFIG['password']}@{DATABASE_CONFIG['host']}:{DATABASE_CONFIG['port']}/{DATABASE_CONFIG['database']}"
+
+
+# Експортуємо SQLAlchemy engine
+from sqlalchemy import create_engine
+engine = create_engine(SQLALCHEMY_URL)
+
